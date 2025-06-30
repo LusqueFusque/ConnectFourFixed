@@ -24,7 +24,6 @@ public class GameManager : MonoBehaviour
 
     void Start()
     {
-        infoText.text = "Jogador Vermelho começa!";
         TurnText.text = "Vez das fichas vermelhas";
         TurnText.color = Color.red;
         telaVitória.SetActive(false);
@@ -77,7 +76,6 @@ public class GameManager : MonoBehaviour
 
         if (SeraseVenceu(coluna, linha))
         {
-            infoText.text = "";
             telaVitória.SetActive(true);
             vitoriaText.text = "Jogador " + (currentPlayer == 1 ? "Vermelho" : "Amarelo") + " venceu!";
             TurnText.text = "";
@@ -139,7 +137,6 @@ public class GameManager : MonoBehaviour
         telaVitória.SetActive(false);         // esconde a tela de vitória
         TurnText.text = "Vez das fichas vermelhas";
         TurnText.color = Color.red;
-        infoText.text = "Jogador Vermelho começa!";
 
         currentPlayer = 1;
         acabou = false;
