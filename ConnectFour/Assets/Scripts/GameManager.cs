@@ -1,7 +1,7 @@
 using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
-using UnityEngine.SceneManagement;
+using System.Collections;
 
 public class GameManager : MonoBehaviour
 {
@@ -21,19 +21,49 @@ public class GameManager : MonoBehaviour
     private bool acabou = false;
     private bool inputTravado = false;
 
+    private bool minhaVez = false;
 
     void Start()
     {
-        infoText.text = "Jogador Vermelho começa!";
-        TurnText.text = "Vez das fichas vermelhas";
-        TurnText.color = Color.red;
         telaVitória.SetActive(false);
         botao.onClick.AddListener(Reinicio);
+        infoText.text = "Escolha criar ou conectar no menu.";
+        TurnText.text = "";
+    }
+
+    public void IniciarJogoComoHost()
+    {
+        currentPlayer = 1;
+        minhaVez = true;
+        acabou = false;
+        inputTravado = false;
+
+        infoText.text = "Você é o jogador Vermelho! Sua vez!";
+        TurnText.text = "Vez das fichas vermelhas";
+        TurnText.color = Color.red;
+
+        board = new int[7, 6]; // reset tabuleiro lógico
+        NetworkManager.Instance.OnReceivedMove += OnReceivedMove;
+    }
+
+    public void IniciarJogoComoCliente()
+    {
+        currentPlayer = 1;
+        minhaVez = false;
+        acabou = false;
+        inputTravado = false;
+
+        infoText.text = "Você é o jogador Amarelo! Aguardando o outro jogar...";
+        TurnText.text = "Vez das fichas vermelhas";
+        TurnText.color = Color.red;
+
+        board = new int[7, 6]; // reset tabuleiro lógico
+        NetworkManager.Instance.OnReceivedMove += OnReceivedMove;
     }
 
     void Update()
     {
-        if (acabou || inputTravado) return;
+        if (acabou || inputTravado || !minhaVez) return;
 
         if (Input.GetMouseButtonDown(0))
         {
@@ -43,6 +73,8 @@ public class GameManager : MonoBehaviour
             if (coluna >= 0 && coluna < 7)
             {
                 PosicFicha(coluna);
+                NetworkManager.Instance.SendMove(coluna);
+                minhaVez = false;
             }
         }
     }
@@ -67,12 +99,9 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    System.Collections.IEnumerator AnimacaoFinal(GameObject disc, Vector3 destino, int coluna, int linha)
+    IEnumerator AnimacaoFinal(GameObject disc, Vector3 destino, int coluna, int linha)
     {
-        // Anima a ficha descendo
         yield return StartCoroutine(anim(disc, destino));
-
-        // Pequeno delay para dar tempo visual antes da vitória
         yield return new WaitForSeconds(0.2f);
 
         if (SeraseVenceu(coluna, linha))
@@ -96,7 +125,6 @@ public class GameManager : MonoBehaviour
     {
         int player = board[col, linha];
 
-        // horizontal, vertical, diagonal
         if (CountInDirection(col, linha, 1, 0, player) + CountInDirection(col, linha, -1, 0, player) >= 3) return true;
         if (CountInDirection(col, linha, 0, 1, player) + CountInDirection(col, linha, 0, -1, player) >= 3) return true;
         if (CountInDirection(col, linha, 1, 1, player) + CountInDirection(col, linha, -1, -1, player) >= 3) return true;
@@ -121,7 +149,7 @@ public class GameManager : MonoBehaviour
         return count;
     }
 
-    System.Collections.IEnumerator anim(GameObject disc, Vector3 target)
+    IEnumerator anim(GameObject disc, Vector3 target)
     {
         float speed = 15f;
 
@@ -134,9 +162,9 @@ public class GameManager : MonoBehaviour
         disc.transform.position = target;
     }
 
-    void Reinicio()
+    public void Reinicio()
     {
-        telaVitória.SetActive(false);         // esconde a tela de vitória
+        telaVitória.SetActive(false);
         TurnText.text = "Vez das fichas vermelhas";
         TurnText.color = Color.red;
         infoText.text = "Jogador Vermelho começa!";
@@ -144,13 +172,25 @@ public class GameManager : MonoBehaviour
         currentPlayer = 1;
         acabou = false;
         inputTravado = false;
+        minhaVez = (NetworkManager.Instance.mode == NetworkMode.Host);
 
-        // limpa o board visual e lógico
         foreach (GameObject ficha in GameObject.FindGameObjectsWithTag("Ficha"))
         {
             Destroy(ficha);
         }
 
-        board = new int[7, 6]; // zera o tabuleiro lógico
+        board = new int[7, 6];
+    }
+
+    // Método chamado ao receber jogada pela rede
+    void OnReceivedMove(int coluna)
+    {
+        // Executar no main thread (use UnityMainThreadDispatcher se tiver)
+        UnityMainThreadDispatcher.Instance().Enqueue(() =>
+        {
+            PosicFicha(coluna);
+            minhaVez = true;
+            infoText.text = "Sua vez!";
+        });
     }
 }
