@@ -5,31 +5,29 @@ using System.Text;
 using System.Threading;
 using UnityEngine;
 
-// Enum para definir se é servidor ou cliente
-public enum NetworkMode { None, Host, Client }
-
 public class NetworkManager : MonoBehaviour
 {
-    public static NetworkManager Instance; // singleton para fácil acesso
+    public static NetworkManager Instance;  // Singleton para acesso global
+
+    public enum NetworkMode { None, Host, Client }
     public NetworkMode mode = NetworkMode.None;
-    public string serverIP = "127.0.0.1"; // IP que o cliente vai usar para conectar
-    public int port = 8080;
 
-    private TcpListener listener;
+    private TcpListener server;
     private TcpClient client;
-    private NetworkStream stream;
+    private Thread serverThread;
+    private Thread clientThread;
 
-    private Thread netThread;
-    private bool running = false;
+    private GameManager gameManager;
 
-    public Action<int> OnReceivedMove; // evento chamado ao receber jogada
+    public Action<int> OnReceivedMove;  // Evento para avisar quando receber jogada do outro jogador
 
-    void Awake()
+    private void Awake()
     {
+        // Garante que só existe um NetworkManager
         if (Instance == null)
         {
             Instance = this;
-            DontDestroyOnLoad(gameObject); // mantém ao trocar de cena
+            DontDestroyOnLoad(gameObject); // Mantém ao trocar de cena (se tiver)
         }
         else
         {
@@ -37,113 +35,161 @@ public class NetworkManager : MonoBehaviour
         }
     }
 
+    private void Start()
+    {
+        // Pega referência ao GameManager na main thread
+        gameManager = FindObjectOfType<GameManager>();
+        if (gameManager == null)
+        {
+            Debug.LogError("[NetworkManager] GameManager não encontrado na cena!");
+        }
+    }
+
+    /// <summary>
+    /// Chamado pelo MenuManager quando jogador clica "Criar Partida"
+    /// </summary>
     public void StartHost()
     {
         mode = NetworkMode.Host;
-        running = true;
-        netThread = new Thread(HostThread);
-        netThread.IsBackground = true;
-        netThread.Start();
+
+        serverThread = new Thread(ServerLoop);
+        serverThread.IsBackground = true;
+        serverThread.Start();
+
+        Debug.Log("[Host] Servidor iniciado. Aguardando conexões...");
     }
 
-    public void StartClient()
+    /// <summary>
+    /// Chamado pelo MenuManager quando jogador clica "Conectar"
+    /// </summary>
+    public void StartClient(string serverIP)
     {
         mode = NetworkMode.Client;
-        running = true;
-        netThread = new Thread(ClientThread);
-        netThread.IsBackground = true;
-        netThread.Start();
+
+        clientThread = new Thread(() => ClientLoop(serverIP));
+        clientThread.IsBackground = true;
+        clientThread.Start();
+
+        Debug.Log("[Cliente] Tentando conectar ao servidor em: " + serverIP);
     }
 
-    private void HostThread()
+    /// <summary>
+    /// Loop do servidor (host)
+    /// </summary>
+    private void ServerLoop()
     {
         try
         {
-            listener = new TcpListener(IPAddress.Any, port);
-            listener.Start();
-            Debug.Log("[Host] Aguardando conexão...");
-            client = listener.AcceptTcpClient();
-            stream = client.GetStream();
+            server = new TcpListener(IPAddress.Any, 8080);
+            server.Start();
+            Debug.Log("[Host] Servidor escutando na porta 8080...");
+
+            client = server.AcceptTcpClient();  // Espera o cliente conectar
             Debug.Log("[Host] Cliente conectado!");
 
-            ListenLoop();
-        }
-        catch (Exception e)
-        {
-            Debug.LogError("[Host] Erro: " + e.Message);
-        }
-    }
-
-    private void ClientThread()
-    {
-        try
-        {
-            Debug.Log("[Cliente] Conectando ao servidor...");
-            client = new TcpClient(serverIP, port);
-            stream = client.GetStream();
-            Debug.Log("[Cliente] Conectado!");
-
-            ListenLoop();
-        }
-        catch (Exception e)
-        {
-            Debug.LogError("[Cliente] Erro: " + e.Message);
-        }
-    }
-
-    private void ListenLoop()
-    {
-        byte[] buffer = new byte[1024];
-        while (running)
-        {
-            try
+            using (NetworkStream stream = client.GetStream())
             {
-                if (stream.CanRead && stream.DataAvailable)
+                byte[] buffer = new byte[1024];
+                while (true)
                 {
-                    int len = stream.Read(buffer, 0, buffer.Length);
-                    if (len > 0)
-                    {
-                        string msg = Encoding.UTF8.GetString(buffer, 0, len);
-                        int coluna = int.Parse(msg);
-                        Debug.Log("[Network] Jogada recebida: coluna " + coluna);
+                    int bytesRead = stream.Read(buffer, 0, buffer.Length);
+                    if (bytesRead == 0) break; // Cliente desconectou
 
-                        OnReceivedMove?.Invoke(coluna); // chama evento
+                    string msg = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                    Debug.Log("[Host] Recebido: " + msg);
+
+                    // Espera que o cliente envie sempre um número (coluna)
+                    if (int.TryParse(msg, out int coluna))
+                    {
+                        UnityMainThreadDispatcher.Instance().Enqueue(() =>
+                        {
+                            OnReceivedMove?.Invoke(coluna);
+                        });
                     }
                 }
             }
-            catch (Exception e)
-            {
-                Debug.LogError("[Network] Erro no loop: " + e.Message);
-                running = false;
-            }
-
-            Thread.Sleep(10); // evitar CPU 100%
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("[Host] Erro no ServerLoop: " + ex.Message);
         }
     }
 
+    /// <summary>
+    /// Loop do cliente (conecta ao host)
+    /// </summary>
+    private void ClientLoop(string serverIP)
+    {
+        try
+        {
+            client = new TcpClient();
+            client.Connect(serverIP, 8080);
+            Debug.Log("[Cliente] Conectado ao servidor!");
+
+            using (NetworkStream stream = client.GetStream())
+            {
+                byte[] buffer = new byte[1024];
+                while (true)
+                {
+                    int bytesRead = stream.Read(buffer, 0, buffer.Length);
+                    if (bytesRead == 0) break; // Servidor desconectou
+
+                    string msg = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                    Debug.Log("[Cliente] Recebido: " + msg);
+
+                    if (int.TryParse(msg, out int coluna))
+                    {
+                        UnityMainThreadDispatcher.Instance().Enqueue(() =>
+                        {
+                            OnReceivedMove?.Invoke(coluna);
+                        });
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("[Cliente] Erro no ClientLoop: " + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Envia a jogada para o outro jogador
+    /// </summary>
     public void SendMove(int coluna)
     {
-        if (stream != null && stream.CanWrite)
+        try
         {
-            byte[] msg = Encoding.UTF8.GetBytes(coluna.ToString());
-            try
+            if (client != null && client.Connected)
             {
-                stream.Write(msg, 0, msg.Length);
-                Debug.Log("[Network] Jogada enviada: coluna " + coluna);
+                string msg = coluna.ToString();
+                byte[] data = Encoding.UTF8.GetBytes(msg);
+                client.GetStream().Write(data, 0, data.Length);
+                Debug.Log("[Network] Enviou coluna: " + coluna);
             }
-            catch (Exception e)
+            else
             {
-                Debug.LogError("[Network] Erro ao enviar: " + e.Message);
+                Debug.LogWarning("[Network] Não está conectado para enviar.");
             }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("[Network] Erro ao enviar jogada: " + ex.Message);
         }
     }
 
-    void OnApplicationQuit()
+    private void OnApplicationQuit()
     {
-        running = false;
-        netThread?.Abort();
-        stream?.Close();
-        client?.Close();
-        listener?.Stop();
+        try
+        {
+            server?.Stop();
+            client?.Close();
+            serverThread?.Abort();
+            clientThread?.Abort();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("[Network] Erro ao fechar: " + ex.Message);
+        }
     }
 }
