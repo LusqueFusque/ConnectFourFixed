@@ -1,5 +1,8 @@
 using UnityEngine;
-using TMPro;  // precisa disso pra TMP_InputField
+using TMPro;  // para TMP_InputField e TextMeshProUGUI
+using System.Net;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
 
 /// <summary>
 /// Gerencia o menu inicial onde o jogador escolhe ser Host ou Cliente.
@@ -9,28 +12,24 @@ public class MenuManager : MonoBehaviour
     [Header("Referências UI")]
     public GameObject painelMenu;              // painel com botões e input
     public TMP_InputField ipInput;             // campo para digitar o IP
+    public TextMeshProUGUI ipText;             // texto que mostra o IP local do host
     public GameManager gameManager;            // referência ao GameManager
 
     private void Start()
     {
-        // O painel do menu deve começar ativo
         painelMenu.SetActive(true);
 
-        // Verifica se o GameManager está na cena
         if (gameManager == null)
         {
             gameManager = FindObjectOfType<GameManager>();
             if (gameManager == null)
-            {
                 Debug.LogError("[MenuManager] GameManager não encontrado na cena!");
-            }
         }
 
-        // Associa o callback de receber jogada do outro jogador
         NetworkManager.Instance.OnReceivedMove = (coluna) =>
         {
             Debug.Log("[MenuManager] Recebeu jogada do outro jogador: coluna " + coluna);
-            gameManager.OnReceivedMove(coluna);  // chama método no GameManager
+            gameManager.OnReceivedMove(coluna);
         };
     }
 
@@ -39,9 +38,14 @@ public class MenuManager : MonoBehaviour
     /// </summary>
     public void OnHostButton()
     {
-        painelMenu.SetActive(false); // esconde o menu
+        painelMenu.SetActive(false);
         NetworkManager.Instance.StartHost();
-        Debug.Log("[Menu] Host iniciado!");
+
+        string localIP = GetLocalIPv4();
+        if (ipText != null)
+            ipText.text = "Seu IP: " + localIP;
+
+        Debug.Log("[Menu] Host iniciado! IP local: " + localIP);
     }
 
     /// <summary>
@@ -56,8 +60,34 @@ public class MenuManager : MonoBehaviour
             return;
         }
 
-        painelMenu.SetActive(false); // esconde o menu
+        painelMenu.SetActive(false);
         NetworkManager.Instance.StartClient(ip);
         Debug.Log("[Menu] Conectando ao servidor em: " + ip);
+    }
+
+    /// <summary>
+    /// Retorna o primeiro IP IPv4 válido da interface de rede ativa, ignorando adaptadores virtuais e loopback
+    /// </summary>
+    private string GetLocalIPv4()
+    {
+        foreach (NetworkInterface ni in NetworkInterface.GetAllNetworkInterfaces())
+        {
+            if (ni.OperationalStatus != OperationalStatus.Up)
+                continue;
+            if (ni.NetworkInterfaceType == NetworkInterfaceType.Loopback)
+                continue;
+
+            string name = ni.Name.ToLower();
+            if (name.Contains("virtual") || name.Contains("docker") || name.Contains("vpn"))
+                continue;
+
+            IPInterfaceProperties ipProps = ni.GetIPProperties();
+            foreach (UnicastIPAddressInformation addr in ipProps.UnicastAddresses)
+            {
+                if (addr.Address.AddressFamily == AddressFamily.InterNetwork)
+                    return addr.Address.ToString();
+            }
+        }
+        return "127.0.0.1";
     }
 }
