@@ -563,7 +563,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   painelMenu: {fileID: 1491531532}
   ipInput: {fileID: 625137906}
-  ipText: {fileID: 0}
+  ipText: {fileID: 1012565457}
   gameManager: {fileID: 867296065}
 --- !u!4 &485492384
 Transform:
