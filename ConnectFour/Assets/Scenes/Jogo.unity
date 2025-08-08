@@ -391,11 +391,6 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 64877fe307f64a14985fe929b05375a9, type: 3}
---- !u!1 &322500165 stripped
-GameObject:
-  m_CorrespondingSourceObject: {fileID: 3284026469964088150, guid: 64877fe307f64a14985fe929b05375a9, type: 3}
-  m_PrefabInstance: {fileID: 322500164}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1 &469264200
 GameObject:
   m_ObjectHideFlags: 0
@@ -819,11 +814,6 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 41e225e9d71325d47aedd52897534b1b, type: 3}
---- !u!1 &604425209 stripped
-GameObject:
-  m_CorrespondingSourceObject: {fileID: 5888879299971848374, guid: 41e225e9d71325d47aedd52897534b1b, type: 3}
-  m_PrefabInstance: {fileID: 604425208}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1 &619394800
 GameObject:
   m_ObjectHideFlags: 0
@@ -1463,8 +1453,8 @@ MonoBehaviour:
   vitoriaText: {fileID: 166047192}
   telaVitoria: {fileID: 1807893198}
   botao: {fileID: 1369688635}
-  ficVermelha: {fileID: 604425209}
-  ficAmarela: {fileID: 322500165}
+  ficVermelha: {fileID: 5888879299971848374, guid: 41e225e9d71325d47aedd52897534b1b, type: 3}
+  ficAmarela: {fileID: 3284026469964088150, guid: 64877fe307f64a14985fe929b05375a9, type: 3}
 --- !u!4 &867296066
 Transform:
   m_ObjectHideFlags: 0
